@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mining Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-btc: #f7931a;
+            --accent-bch: #8dc351;
+            --accent-success: #22c55e;
+            --accent-warning: #eab308;
+            --accent-danger: #ef4444;
+        }
+
+        body {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .pool-btc { border-left: 4px solid var(--accent-btc); }
+        .pool-bch { border-left: 4px solid var(--accent-bch); }
+        .worker-online { color: var(--accent-success); }
+        .worker-offline { color: var(--accent-danger); }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .btn-primary {
+            background: var(--accent-btc);
+            color: white;
+            border-color: var(--accent-btc);
+        }
+
+        .btn-primary:hover { opacity: 0.9; }
+
+        .btn-secondary {
+            background: var(--bg-card);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-secondary);
+            border-color: var(--accent-btc);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active { display: flex; }
+
+        .modal-content {
+            background: var(--bg-secondary);
+            border-radius: 1rem;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--bg-card);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            margin-top: 0.5rem;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: var(--accent-btc);
+        }
+
+        .hashrate-big {
+            font-size: 2rem;
+            font-weight: 800;
+        }
+
+        .coin-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .coin-btc { background: rgba(247, 147, 26, 0.2); color: var(--accent-btc); }
+        .coin-bch { background: rgba(141, 195, 81, 0.2); color: var(--accent-bch); }
+
+        .difficulty-bar {
+            height: 8px;
+            background: var(--bg-card);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .difficulty-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-btc), var(--accent-warning));
+            transition: width 0.3s ease;
+        }
+
+        .miner-card {
+            background: var(--bg-card);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .miner-status-online {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-success);
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .miner-status-offline {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-danger);
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .spinner {
+            border: 2px solid rgba(255,255,255,0.1);
+            border-top: 2px solid var(--accent-btc);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 class="text-3xl font-bold">⛏️ Mining Dashboard</h1>
+                <p class="text-gray-400 mt-1">
+                    Last updated: <span id="lastUpdated">{{ data.last_updated }}</span>
+                </p>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="openAddWalletModal()" class="btn btn-primary">
+                    + Add Wallet
+                </button>
+                <button onclick="scanNetwork()" class="btn btn-secondary flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                    </svg>
+                    Scan Network
+                </button>
+                <button onclick="refreshData()" class="btn btn-secondary flex items-center gap-2">
+                    <svg id="refreshIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Network Difficulties -->
+        {% if data.network_difficulties %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            {% if data.network_difficulties.BTC %}
+            <div class="card">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="text-2xl">₿</span>
+                    <span class="stat-label">BTC Network Difficulty</span>
+                </div>
+                <div class="stat-value" style="color: var(--accent-btc)">
+                    {{ "%.2f"|format(data.network_difficulties.BTC / 1e12) }} T
+                </div>
+            </div>
+            {% endif %}
+
+            {% if data.network_difficulties.BCH %}
+            <div class="card">
+                <div class="flex items-center gap-3 mb-2">
+                    <span class="text-2xl">Ƀ</span>
+                    <span class="stat-label">BCH Network Difficulty</span>
+                </div>
+                <div class="stat-value" style="color: var(--accent-bch)">
+                    {{ "%.2f"|format(data.network_difficulties.BCH / 1e9) }} G
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Wallets -->
+        <div class="mb-8">
+            <h2 class="text-2xl font-bold mb-4">Tracked Wallets</h2>
+
+            {% if data.wallets %}
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {% for wallet in data.wallets %}
+                <div class="card {% if wallet.coin == 'BTC' %}pool-btc{% elif wallet.coin == 'BCH' %}pool-bch{% endif %}">
+                    <!-- Wallet Header -->
+                    <div class="flex justify-between items-start mb-6">
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2 mb-1">
+                                <h3 class="text-xl font-bold">{{ wallet.name }}</h3>
+                                <span class="coin-badge coin-{{ wallet.coin|lower }}">{{ wallet.coin }}</span>
+                            </div>
+                            <p class="text-gray-400 text-sm font-mono truncate">
+                                {{ wallet.address[:16] }}...{{ wallet.address[-12:] }}
+                            </p>
+                            <p class="text-gray-500 text-xs mt-1">{{ wallet.pool_adapter }}</p>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            {% if wallet.stats %}
+                            <span class="worker-online">● {{ wallet.stats.workers_online }}</span>
+                            {% if wallet.stats.workers_offline > 0 %}
+                            <span class="worker-offline">● {{ wallet.stats.workers_offline }}</span>
+                            {% endif %}
+                            {% endif %}
+                            <button onclick="deleteWallet({{ wallet.wallet_id }})" class="text-gray-400 hover:text-red-400">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    {% if wallet.error %}
+                    <!-- Error State -->
+                    <div class="text-red-400 text-sm">
+                        Error: {{ wallet.error }}
+                    </div>
+                    {% elif wallet.stats %}
+                    <!-- Stats -->
+                    <div class="mb-6">
+                        <div class="stat-label mb-1">Current Hashrate</div>
+                        <div class="hashrate-big" style="color: {% if wallet.coin == 'BTC' %}var(--accent-btc){% else %}var(--accent-bch){% endif %}">
+                            {{ "%.2f"|format(wallet.stats.hashrate / 1e12) }} TH/s
+                        </div>
+                        {% if wallet.stats.hashrate_avg %}
+                        <div class="text-gray-400">
+                            Avg: {{ "%.2f"|format(wallet.stats.hashrate_avg / 1e12) }} TH/s
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Stats Grid -->
+                    <div class="grid grid-cols-2 gap-4 mb-6">
+                        {% if wallet.stats.best_share %}
+                        <div>
+                            <div class="stat-label">Best Share</div>
+                            <div class="stat-value">{{ "%.2e"|format(wallet.stats.best_share) }}</div>
+                        </div>
+                        {% endif %}
+                        {% if wallet.stats.best_ever %}
+                        <div>
+                            <div class="stat-label">Best Ever</div>
+                            <div class="stat-value">{{ "%.2e"|format(wallet.stats.best_ever) }}</div>
+                        </div>
+                        {% endif %}
+                        {% if wallet.stats.balance %}
+                        <div>
+                            <div class="stat-label">Balance</div>
+                            <div class="stat-value">{{ "%.8f"|format(wallet.stats.balance) }}</div>
+                        </div>
+                        {% endif %}
+                        {% if wallet.stats.paid %}
+                        <div>
+                            <div class="stat-label">Paid (24h)</div>
+                            <div class="stat-value">{{ "%.8f"|format(wallet.stats.paid) }}</div>
+                        </div>
+                        {% endif %}
+                        <div>
+                            <div class="stat-label">Total Shares</div>
+                            <div class="stat-value">
+                                {{ wallet.stats.workers|map(attribute='shares_count')|sum if wallet.stats.workers else 0 }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Shares from Miners -->
+                    <div id="recentShares{{ wallet.wallet_id }}" class="mb-4"></div>
+
+                    <!-- Difficulty Progress (if solo mining with best share) -->
+                    {% if wallet.stats.best_share and data.network_difficulties.get(wallet.coin) %}
+                    <div class="mb-6">
+                        <div class="stat-label mb-2">Best Share vs Network Difficulty</div>
+                        <div class="difficulty-bar">
+                            {% set progress = (wallet.stats.best_share / data.network_difficulties[wallet.coin] * 100)|round(6) %}
+                            <div class="difficulty-fill" style="width: {{ [progress, 100]|min }}%"></div>
+                        </div>
+                        <div class="text-right text-sm text-gray-400 mt-1">{{ "%.6f"|format(progress) }}%</div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Workers -->
+                    {% if wallet.stats.workers %}
+                    <div>
+                        <div class="stat-label mb-3">Workers</div>
+                        <div class="space-y-2">
+                            {% for worker in wallet.stats.workers %}
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="font-mono">{{ worker.name }}</span>
+                                <span>{{ "%.2f"|format(worker.hashrate / 1e12) }} TH/s</span>
+                                <span {% if worker.offline %}class="worker-offline"{% else %}class="worker-online"{% endif %}>
+                                    {% if worker.offline %}Offline{% else %}Online{% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="text-gray-400">Loading...</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="card text-center py-12">
+                <p class="text-gray-400 text-lg mb-4">No wallets tracked yet</p>
+                <button onclick="openAddWalletModal()" class="btn btn-primary">
+                    + Add Your First Wallet
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Mining Devices -->
+        <div class="mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-bold">🖥️ Mining Devices</h2>
+                <div class="text-sm text-gray-400">
+                    <span id="minerCount">0</span> devices found
+                </div>
+            </div>
+
+            <div id="minersContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Miner cards will be loaded here -->
+            </div>
+
+            <div id="noMinersMessage" class="card text-center py-12" style="display: none;">
+                <p class="text-gray-400 text-lg mb-4">No miners discovered yet</p>
+                <p class="text-gray-500 text-sm mb-4">Scan your network to find mining devices</p>
+                <button onclick="scanNetwork()" class="btn btn-primary">
+                    Scan Network
+                </button>
+            </div>
+        </div>
+
+        <!-- Combined Stats -->
+        {% if data.wallets %}
+        <div class="card mb-8">
+            <h2 class="text-xl font-bold mb-4">📊 Combined Statistics</h2>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <div class="stat-label">Total Hashrate</div>
+                    <div class="stat-value">
+                        {% set total_hr = namespace(value=0) %}
+                        {% for wallet in data.wallets %}
+                            {% if wallet.stats %}
+                                {% set total_hr.value = total_hr.value + wallet.stats.hashrate %}
+                            {% endif %}
+                        {% endfor %}
+                        {{ "%.2f"|format(total_hr.value / 1e12) }} TH/s
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-label">Total Wallets</div>
+                    <div class="stat-value">{{ data.wallets|length }}</div>
+                </div>
+                <div>
+                    <div class="stat-label">Online Workers</div>
+                    <div class="stat-value worker-online">
+                        {% set online = namespace(value=0) %}
+                        {% for wallet in data.wallets %}
+                            {% if wallet.stats %}
+                                {% set online.value = online.value + wallet.stats.workers_online %}
+                            {% endif %}
+                        {% endfor %}
+                        {{ online.value }}
+                    </div>
+                </div>
+                <div>
+                    <div class="stat-label">Offline Workers</div>
+                    <div class="stat-value worker-offline">
+                        {% set offline = namespace(value=0) %}
+                        {% for wallet in data.wallets %}
+                            {% if wallet.stats %}
+                                {% set offline.value = offline.value + wallet.stats.workers_offline %}
+                            {% endif %}
+                        {% endfor %}
+                        {{ offline.value }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Footer -->
+        <div class="text-center text-gray-500 text-sm">
+            <p>Auto-refreshes every 60 seconds • Multi-Pool Mining Dashboard v2.0</p>
+        </div>
+    </div>
+
+    <!-- Add Wallet Modal -->
+    <div id="addWalletModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold mb-4">Add New Wallet</h2>
+
+            <form onsubmit="addWallet(event)">
+                <div class="mb-4">
+                    <label class="stat-label">Wallet Name</label>
+                    <input type="text" id="walletName" class="input" placeholder="My BTC Wallet" required>
+                </div>
+
+                <div class="mb-4">
+                    <label class="stat-label">Pool Adapter</label>
+                    <select id="poolAdapter" class="input" required onchange="updateCoinFromPool()">
+                        <option value="">Select Pool...</option>
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="stat-label">Wallet Address</label>
+                    <input type="text" id="walletAddress" class="input" placeholder="Your wallet address" required>
+                </div>
+
+                <div class="flex gap-2 justify-end">
+                    <button type="button" onclick="closeAddWalletModal()" class="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Add Wallet
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Link Miner Modal -->
+    <div id="linkMinerModal" class="modal">
+        <div class="modal-content">
+            <h2 class="text-2xl font-bold mb-4">Link Miner to Wallet</h2>
+
+            <form onsubmit="linkMiner(event)">
+                <input type="hidden" id="linkMinerId">
+
+                <div class="mb-4">
+                    <label class="stat-label">Select Wallet</label>
+                    <select id="linkWalletId" class="input" required>
+                        <option value="">Select wallet...</option>
+                    </select>
+                </div>
+
+                <div class="flex gap-2 justify-end">
+                    <button type="button" onclick="closeLinkMinerModal()" class="btn btn-secondary">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        Link
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let availablePools = [];
+        let currentMiners = [];
+
+        // Load available pools
+        async function loadPools() {
+            try {
+                const response = await fetch('/api/pools');
+                availablePools = await response.json();
+
+                const select = document.getElementById('poolAdapter');
+                select.innerHTML = '<option value="">Select Pool...</option>';
+
+                availablePools.forEach(pool => {
+                    const option = document.createElement('option');
+                    option.value = pool.key;
+                    option.textContent = `${pool.name} (${pool.coin})`;
+                    select.appendChild(option);
+                });
+            } catch (error) {
+                console.error('Failed to load pools:', error);
+            }
+        }
+
+        function openAddWalletModal() {
+            document.getElementById('addWalletModal').classList.add('active');
+        }
+
+        function closeAddWalletModal() {
+            document.getElementById('addWalletModal').classList.remove('active');
+            document.getElementById('walletName').value = '';
+            document.getElementById('walletAddress').value = '';
+            document.getElementById('poolAdapter').value = '';
+        }
+
+        async function addWallet(event) {
+            event.preventDefault();
+
+            const name = document.getElementById('walletName').value;
+            const address = document.getElementById('walletAddress').value;
+            const pool_adapter = document.getElementById('poolAdapter').value;
+
+            try {
+                const response = await fetch('/api/wallets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, address, pool_adapter })
+                });
+
+                if (response.ok) {
+                    closeAddWalletModal();
+                    window.location.reload();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.detail}`);
+                }
+            } catch (error) {
+                alert(`Failed to add wallet: ${error}`);
+            }
+        }
+
+        async function deleteWallet(walletId) {
+            if (!confirm('Are you sure you want to delete this wallet? All historical data will be removed.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/wallets/${walletId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('Failed to delete wallet');
+                }
+            } catch (error) {
+                alert(`Error: ${error}`);
+            }
+        }
+
+        async function refreshData() {
+            const icon = document.getElementById('refreshIcon');
+            icon.classList.add('animate-spin');
+
+            try {
+                const response = await fetch('/api/refresh');
+                if (response.ok) {
+                    window.location.reload();
+                }
+            } catch (error) {
+                console.error('Refresh failed:', error);
+            } finally {
+                icon.classList.remove('animate-spin');
+            }
+        }
+
+        // Miner Management Functions
+        async function loadMiners() {
+            try {
+                const response = await fetch('/api/miners?enabled_only=true');
+                currentMiners = await response.json();
+
+                const container = document.getElementById('minersContainer');
+                const noMinersMsg = document.getElementById('noMinersMessage');
+                const minerCount = document.getElementById('minerCount');
+
+                minerCount.textContent = currentMiners.length;
+
+                if (currentMiners.length === 0) {
+                    container.innerHTML = '';
+                    noMinersMsg.style.display = 'block';
+                    return;
+                }
+
+                noMinersMsg.style.display = 'none';
+                container.innerHTML = '';
+
+                for (const miner of currentMiners) {
+                    const card = await createMinerCard(miner);
+                    container.appendChild(card);
+                }
+            } catch (error) {
+                console.error('Failed to load miners:', error);
+            }
+        }
+
+        async function createMinerCard(miner) {
+            const card = document.createElement('div');
+            card.className = 'miner-card';
+
+            // Get live info
+            let liveInfo = null;
+            try {
+                const infoResponse = await fetch(`/api/miners/${miner.id}/info`);
+                if (infoResponse.ok) {
+                    liveInfo = await infoResponse.json();
+                }
+            } catch (error) {
+                console.error(`Failed to get info for miner ${miner.id}:`, error);
+            }
+
+            // Get miner config (wallet link)
+            let config = null;
+            try {
+                const configResponse = await fetch(`/api/miners/${miner.id}/configs`);
+                if (configResponse.ok) {
+                    const configs = await configResponse.json();
+                    config = configs[0] || null;
+                }
+            } catch (error) {
+                console.error(`Failed to get config for miner ${miner.id}:`, error);
+            }
+
+            const isOnline = liveInfo && liveInfo.status === 'online';
+            const statusClass = isOnline ? 'miner-status-online' : 'miner-status-offline';
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-3">
+                    <div class="flex items-center gap-2">
+                        <span class="${statusClass}"></span>
+                        <h3 class="font-bold text-lg">${miner.name}</h3>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        ${miner.auto_discovered ? '<span class="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded">Auto</span>' : ''}
+                        <button onclick="deleteMiner(${miner.id})" class="text-gray-400 hover:text-red-400">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-sm mb-3">
+                    <div class="text-gray-400">Type: <span class="text-white">${miner.miner_type}</span></div>
+                    <div class="text-gray-400">IP: <span class="text-white font-mono">${miner.ip_address}</span></div>
+                </div>
+
+                ${liveInfo ? `
+                    <div class="mb-3 pb-3 border-b border-gray-600">
+                        ${liveInfo.hashrate ? `
+                            <div class="text-sm">
+                                <span class="text-gray-400">Hashrate:</span>
+                                <span class="text-green-400 font-bold">${(liveInfo.hashrate / 1e9).toFixed(2)} GH/s</span>
+                            </div>
+                        ` : ''}
+                        ${liveInfo.temperature ? `
+                            <div class="text-sm">
+                                <span class="text-gray-400">Temperature:</span>
+                                <span class="text-yellow-400">${liveInfo.temperature.toFixed(1)}°C</span>
+                            </div>
+                        ` : ''}
+                        ${liveInfo.pool_url ? `
+                            <div class="text-sm truncate">
+                                <span class="text-gray-400">Pool:</span>
+                                <span class="text-white text-xs">${liveInfo.pool_url}</span>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : `
+                    <div class="mb-3 pb-3 border-b border-gray-600 text-sm text-gray-500">
+                        No live data available
+                    </div>
+                `}
+
+                <div class="flex gap-2">
+                    ${config && config.wallet_id ? `
+                        <button onclick="unlinkMiner(${miner.id})" class="btn btn-secondary text-xs flex-1">
+                            Unlink Wallet
+                        </button>
+                    ` : `
+                        <button onclick="openLinkMinerModal(${miner.id})" class="btn btn-primary text-xs flex-1">
+                            Link to Wallet
+                        </button>
+                    `}
+                </div>
+            `;
+
+            return card;
+        }
+
+        async function scanNetwork() {
+            const button = event.target.closest('button');
+            const originalText = button.innerHTML;
+
+            button.disabled = true;
+            button.innerHTML = '<div class="spinner mx-auto"></div>';
+
+            try {
+                const response = await fetch('/api/miners/scan', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    alert(`Scan complete! Discovered ${result.discovered} miner(s)`);
+                    await loadMiners();
+                } else {
+                    const error = await response.json();
+                    alert(`Scan failed: ${error.detail}`);
+                }
+            } catch (error) {
+                alert(`Scan failed: ${error}`);
+            } finally {
+                button.disabled = false;
+                button.innerHTML = originalText;
+            }
+        }
+
+        async function deleteMiner(minerId) {
+            if (!confirm('Are you sure you want to delete this miner?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/miners/${minerId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await loadMiners();
+                } else {
+                    alert('Failed to delete miner');
+                }
+            } catch (error) {
+                alert(`Error: ${error}`);
+            }
+        }
+
+        function openLinkMinerModal(minerId) {
+            document.getElementById('linkMinerId').value = minerId;
+
+            // Populate wallet dropdown
+            const select = document.getElementById('linkWalletId');
+            select.innerHTML = '<option value="">Select wallet...</option>';
+
+            // Get wallets from current page data
+            fetch('/api/wallets')
+                .then(response => response.json())
+                .then(wallets => {
+                    wallets.forEach(wallet => {
+                        const option = document.createElement('option');
+                        option.value = wallet.id;
+                        option.textContent = `${wallet.name} (${wallet.coin})`;
+                        select.appendChild(option);
+                    });
+                });
+
+            document.getElementById('linkMinerModal').classList.add('active');
+        }
+
+        function closeLinkMinerModal() {
+            document.getElementById('linkMinerModal').classList.remove('active');
+            document.getElementById('linkMinerId').value = '';
+            document.getElementById('linkWalletId').value = '';
+        }
+
+        async function linkMiner(event) {
+            event.preventDefault();
+
+            const minerId = document.getElementById('linkMinerId').value;
+            const walletId = document.getElementById('linkWalletId').value;
+
+            try {
+                const response = await fetch(`/api/miners/${minerId}/link-wallet?wallet_id=${walletId}`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    closeLinkMinerModal();
+                    await loadMiners();
+                } else {
+                    const error = await response.json();
+                    alert(`Error: ${error.detail}`);
+                }
+            } catch (error) {
+                alert(`Failed to link miner: ${error}`);
+            }
+        }
+
+        async function unlinkMiner(minerId) {
+            if (!confirm('Are you sure you want to unlink this miner from its wallet?')) {
+                return;
+            }
+
+            try {
+                // Get current config
+                const configResponse = await fetch(`/api/miners/${minerId}/configs`);
+                const configs = await configResponse.json();
+
+                if (configs.length > 0) {
+                    const configId = configs[0].id;
+
+                    // Delete the config
+                    const response = await fetch(`/api/miners/configs/${configId}`, {
+                        method: 'DELETE'
+                    });
+
+                    if (response.ok) {
+                        await loadMiners();
+                    } else {
+                        alert('Failed to unlink miner');
+                    }
+                }
+            } catch (error) {
+                alert(`Error: ${error}`);
+            }
+        }
+
+        // Load recent shares for a wallet
+        async function loadRecentShares(walletId) {
+            try {
+                const response = await fetch(`/api/wallet/${walletId}/shares?hours=1&limit=5`);
+                if (!response.ok) return;
+
+                const shares = await response.json();
+                const container = document.getElementById(`recentShares${walletId}`);
+
+                if (!shares || shares.length === 0) {
+                    container.innerHTML = '';
+                    return;
+                }
+
+                // Show recent high-difficulty shares
+                const highShares = shares.filter(s => s.difficulty > 1000000).slice(0, 3);
+                if (highShares.length === 0) {
+                    container.innerHTML = '';
+                    return;
+                }
+
+                let html = '<div class="mb-4"><div class="stat-label mb-2">Recent Shares (Last Hour)</div><div class="space-y-1">';
+
+                for (const share of highShares) {
+                    const timeAgo = getTimeAgo(share.timestamp);
+                    const difficultyStr = formatDifficulty(share.difficulty);
+                    const colorClass = share.accepted ? 'text-green-400' : 'text-red-400';
+
+                    html += `
+                        <div class="text-xs flex justify-between items-center">
+                            <span class="${colorClass}">${share.accepted ? '✓' : '✗'} ${difficultyStr}</span>
+                            <span class="text-gray-500">${timeAgo}</span>
+                        </div>
+                    `;
+                }
+
+                html += '</div></div>';
+                container.innerHTML = html;
+
+            } catch (error) {
+                console.error(`Failed to load shares for wallet ${walletId}:`, error);
+            }
+        }
+
+        function formatDifficulty(diff) {
+            if (diff >= 1e12) return (diff / 1e12).toFixed(2) + 'T';
+            if (diff >= 1e9) return (diff / 1e9).toFixed(2) + 'G';
+            if (diff >= 1e6) return (diff / 1e6).toFixed(2) + 'M';
+            if (diff >= 1e3) return (diff / 1e3).toFixed(2) + 'K';
+            return diff.toFixed(0);
+        }
+
+        function getTimeAgo(timestamp) {
+            if (!timestamp) return 'now';
+            const date = new Date(timestamp);
+            const seconds = Math.floor((new Date() - date) / 1000);
+
+            if (seconds < 60) return `${seconds}s ago`;
+            if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+            return `${Math.floor(seconds / 3600)}h ago`;
+        }
+
+        // Load shares for all wallets
+        async function loadAllShares() {
+            const walletElements = document.querySelectorAll('[id^="recentShares"]');
+            for (const el of walletElements) {
+                const walletId = el.id.replace('recentShares', '');
+                await loadRecentShares(walletId);
+            }
+        }
+
+        // Auto-refresh every 60 seconds
+        setInterval(() => {
+            refreshData();
+            loadMiners();
+            loadAllShares();
+        }, 60000);
+
+        // Load pools, miners, and shares on page load
+        loadPools();
+        loadMiners();
+        loadAllShares();
+    </script>
+</body>
+</html>
