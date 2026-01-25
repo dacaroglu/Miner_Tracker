@@ -1,0 +1,70 @@
+# --- Python / FastAPI ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
+.ruff_cache/
+.pyre/
+.pytype/
+.coverage
+coverage.xml
+htmlcov/
+*.log
+
+# --- FastAPI / Uvicorn / Gunicorn ---
+*.pid
+*.sock
+
+# --- SQLite / Local DBs ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# If you specifically keep DBs in these folders
+data/
+db/
+instance/
+
+# --- Alembic ---
+alembic.ini
+alembic/versions/*.pyc
+
+# --- Environment / secrets ---
+.env
+.env.*
+*.env
+secrets*.json
+*.key
+*.pem
+
+# --- OS / Editor ---
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# --- Frontend / Node (if you add Next.js later) ---
+node_modules/
+.next/
+out/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Build / packaging ---
+build/
+dist/
+*.egg-info/
